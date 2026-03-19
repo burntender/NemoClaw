@@ -38,6 +38,7 @@ const { checkPortAvailable } = require("./preflight");
 const EXPERIMENTAL = process.env.NEMOCLAW_EXPERIMENTAL === "1";
 const DEFAULT_GATEWAY_PORT = 8080;
 const DEFAULT_OPENCLAW_NPM_SPEC = "openclaw@2026.3.11";
+const DEFAULT_OPENCLAW_GIT_SPEC = "github:NVIDIA/OpenClaw#main";
 const DEFAULT_SEARXNG_BASE_URL =
   process.env.NEMOCLAW_SEARXNG_BASE_URL || process.env.SEARXNG_BASE_URL || "http://host.openshell.internal:8081/search";
 const DEFAULT_SEARXNG_LANGUAGE = process.env.NEMOCLAW_SEARXNG_LANGUAGE || "ja-JP";
@@ -98,20 +99,41 @@ function resolveLocalOpenClawDir() {
   return path.resolve(ROOT, "..", "openclaw");
 }
 
-function stageOpenClawPackage(buildCtx) {
+function resolveOpenClawPackageSource() {
+  const explicit = (process.env.NEMOCLAW_OPENCLAW_SOURCE || "").trim();
+  if (explicit) {
+    return {
+      source: explicit,
+      description: `explicit OpenClaw source '${explicit}'`,
+    };
+  }
+
   const localOpenClawDir = resolveLocalOpenClawDir();
-  const localPackageJson = path.join(localOpenClawDir, "package.json");
+  if (fs.existsSync(path.join(localOpenClawDir, "package.json"))) {
+    return {
+      source: localOpenClawDir,
+      description: `local OpenClaw source '${localOpenClawDir}'`,
+    };
+  }
+
+  return {
+    source: DEFAULT_OPENCLAW_GIT_SPEC,
+    description: `GitHub OpenClaw source '${DEFAULT_OPENCLAW_GIT_SPEC}'`,
+  };
+}
+
+function stageOpenClawPackage(buildCtx) {
   const tarballDest = path.join(buildCtx, "openclaw.tgz");
+  const { source, description } = resolveOpenClawPackageSource();
 
   let tarballName = "";
-  if (fs.existsSync(localPackageJson)) {
-    console.log(`  Using local OpenClaw source from '${localOpenClawDir}'`);
-    tarballName = runCapture(
-      `npm_config_loglevel=silent npm pack ${shellQuote(localOpenClawDir)}`,
-      { cwd: buildCtx },
-    );
-  } else {
-    console.log(`  Local OpenClaw source not found at '${localOpenClawDir}'`);
+  try {
+    console.log(`  Using ${description}`);
+    tarballName = runCapture(`npm_config_loglevel=silent npm pack ${shellQuote(source)}`, {
+      cwd: buildCtx,
+    });
+  } catch {
+    console.log(`  Failed to pack ${description}`);
     console.log(`  Falling back to published ${DEFAULT_OPENCLAW_NPM_SPEC}`);
     tarballName = runCapture(`npm_config_loglevel=silent npm pack ${DEFAULT_OPENCLAW_NPM_SPEC}`, {
       cwd: buildCtx,

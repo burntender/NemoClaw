@@ -39,17 +39,29 @@ warn() { echo -e "${YELLOW}>>>${NC} $1"; }
 fail() { echo -e "${RED}>>>${NC} $1"; exit 1; }
 
 DEFAULT_OPENCLAW_NPM_SPEC="openclaw@2026.3.11"
+DEFAULT_OPENCLAW_GIT_SPEC="github:NVIDIA/OpenClaw#main"
 
 stage_openclaw_package() {
   local build_ctx="$1"
   local local_openclaw_dir="${NEMOCLAW_OPENCLAW_DIR:-$REPO_DIR/../openclaw}"
+  local openclaw_source="${NEMOCLAW_OPENCLAW_SOURCE:-}"
+  local openclaw_description=""
   local tarball_name=""
 
-  if [ -f "$local_openclaw_dir/package.json" ]; then
-    info "Using local OpenClaw source from $local_openclaw_dir"
-    tarball_name="$(cd "$build_ctx" && npm_config_loglevel=silent npm pack "$local_openclaw_dir" | tail -n 1)"
+  if [ -n "$openclaw_source" ]; then
+    openclaw_description="explicit OpenClaw source $openclaw_source"
+  elif [ -f "$local_openclaw_dir/package.json" ]; then
+    openclaw_source="$local_openclaw_dir"
+    openclaw_description="local OpenClaw source $local_openclaw_dir"
   else
-    warn "Local OpenClaw source not found at $local_openclaw_dir"
+    openclaw_source="$DEFAULT_OPENCLAW_GIT_SPEC"
+    openclaw_description="GitHub OpenClaw source $DEFAULT_OPENCLAW_GIT_SPEC"
+  fi
+
+  if tarball_name="$(cd "$build_ctx" && npm_config_loglevel=silent npm pack "$openclaw_source" | tail -n 1)"; then
+    info "Using $openclaw_description"
+  else
+    warn "Failed to pack $openclaw_description"
     info "Falling back to published $DEFAULT_OPENCLAW_NPM_SPEC"
     tarball_name="$(cd "$build_ctx" && npm_config_loglevel=silent npm pack "$DEFAULT_OPENCLAW_NPM_SPEC" | tail -n 1)"
   fi

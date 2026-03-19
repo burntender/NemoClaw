@@ -21,6 +21,7 @@ RECOMMENDED_NODE_MAJOR=22
 RUNTIME_REQUIREMENT_MSG="NemoClaw requires Node.js >=${MIN_NODE_MAJOR} and npm >=${MIN_NPM_MAJOR} (recommended Node.js ${RECOMMENDED_NODE_MAJOR})."
 NEMOCLAW_SHIM_DIR="${HOME}/.local/bin"
 ORIGINAL_PATH="${PATH:-}"
+DEFAULT_NEMOCLAW_GIT_SPEC="git+https://github.com/NVIDIA/NemoClaw.git"
 
 # Compare two semver strings (major.minor.patch). Returns 0 if $1 >= $2.
 version_gte() {
@@ -224,9 +225,11 @@ install_nemoclaw() {
     info "NemoClaw package.json found in current directory — installing from source…"
     npm install && npm link
   else
+    local nemoclaw_git_spec="${NEMOCLAW_GIT_SPEC:-$DEFAULT_NEMOCLAW_GIT_SPEC}"
     info "Installing NemoClaw from GitHub…"
+    info "Source: ${nemoclaw_git_spec}"
     # Revert once https://github.com/NVIDIA/NemoClaw/issues/71 is complete and the package is published
-    npm install -g git+https://github.com/NVIDIA/NemoClaw.git
+    npm install -g "${nemoclaw_git_spec}"
   fi
 
   refresh_path
