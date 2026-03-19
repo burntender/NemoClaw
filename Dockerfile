@@ -15,8 +15,11 @@ RUN groupadd -r sandbox && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbo
     && mkdir -p /sandbox/.openclaw /sandbox/.nemoclaw \
     && chown -R sandbox:sandbox /sandbox
 
-# Install OpenClaw CLI
-RUN npm install -g openclaw@2026.3.11
+# Install OpenClaw CLI from the staged package tarball.
+# The build context prepares this from the local sibling repo when available,
+# and falls back to a pinned published package otherwise.
+COPY openclaw.tgz /tmp/openclaw.tgz
+RUN npm install -g /tmp/openclaw.tgz && rm -f /tmp/openclaw.tgz
 
 # Install PyYAML for blueprint runner
 RUN pip3 install --break-system-packages pyyaml

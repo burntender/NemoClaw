@@ -14,6 +14,8 @@ set -euo pipefail
 NEMOCLAW_CMD=("$@")
 CHAT_UI_URL="${CHAT_UI_URL:-http://127.0.0.1:18789}"
 PUBLIC_PORT=18789
+SEARXNG_BASE_URL="${NEMOCLAW_SEARXNG_BASE_URL:-${SEARXNG_BASE_URL:-http://host.openshell.internal:8081/search}}"
+SEARXNG_LANGUAGE="${NEMOCLAW_SEARXNG_LANGUAGE:-ja-JP}"
 
 fix_openclaw_config() {
   python3 - <<'PYCFG'
@@ -50,6 +52,15 @@ gateway['controlUi'] = {
     'allowedOrigins': origins,
 }
 gateway['trustedProxies'] = ['127.0.0.1', '::1']
+
+tools = cfg.setdefault('tools', {})
+web = tools.setdefault('web', {})
+search = web.setdefault('search', {})
+search['enabled'] = True
+search.setdefault('provider', 'searxng')
+searxng = search.setdefault('searxng', {})
+searxng.setdefault('baseUrl', os.environ.get('SEARXNG_BASE_URL', 'http://host.openshell.internal:8081/search'))
+searxng.setdefault('language', os.environ.get('SEARXNG_LANGUAGE', 'ja-JP'))
 
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)
@@ -171,7 +182,7 @@ PYAUTOPAIR
 echo 'Setting up NemoClaw...'
 openclaw doctor --fix > /dev/null 2>&1 || true
 write_auth_profile
-export CHAT_UI_URL PUBLIC_PORT
+export CHAT_UI_URL PUBLIC_PORT SEARXNG_BASE_URL SEARXNG_LANGUAGE
 fix_openclaw_config
 openclaw plugins install /opt/nemoclaw > /dev/null 2>&1 || true
 

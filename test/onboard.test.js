@@ -45,4 +45,23 @@ describe("onboard helpers", () => {
     assert.match(script, /\\"maxTokens\\":8192/);
     assert.match(script, /inference\/Qwen3\.5-122B-A10B-IQ4_KSS\.gguf/);
   });
+
+  it("auto-enables SearXNG web search defaults in the sandbox config sync script", () => {
+    const script = buildSandboxConfigSyncScript({
+      endpointType: "custom",
+      endpointUrl: "https://inference.local/v1",
+      ncpPartner: null,
+      model: "Qwen3.5-122B-A10B-IQ4_KSS.gguf",
+      profile: "inference-local",
+      credentialEnv: "OPENAI_API_KEY",
+      provider: "llama-server-local",
+      onboardedAt: "2026-03-20T09:00:00.000Z",
+    });
+
+    assert.match(script, /search_cfg\['enabled'\] = True/);
+    assert.match(script, /search_cfg\.setdefault\('provider', 'searxng'\)/);
+    assert.match(script, /searxng_cfg = search_cfg\.setdefault\('searxng', \{\}\)/);
+    assert.match(script, /http:\/\/host\.openshell\.internal:8081\/search/);
+    assert.match(script, /ja-JP/);
+  });
 });

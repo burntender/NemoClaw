@@ -165,3 +165,18 @@ network_policies:
         rules:
           - allow: { method: GET, path: "/bot*/**" }
           - allow: { method: POST, path: "/bot*/**" }
+
+  # Local SearXNG search endpoint exposed from the host. This matches the
+  # existing workspace compose setup that publishes SearXNG on host port 8081.
+  searxng_local:
+    name: searxng_local
+    endpoints:
+      - host: host.openshell.internal
+        port: 8081
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/search" }
+          - allow: { method: POST, path: "/search" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }

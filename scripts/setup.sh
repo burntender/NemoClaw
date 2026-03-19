@@ -38,6 +38,26 @@ info() { echo -e "${GREEN}>>>${NC} $1"; }
 warn() { echo -e "${YELLOW}>>>${NC} $1"; }
 fail() { echo -e "${RED}>>>${NC} $1"; exit 1; }
 
+DEFAULT_OPENCLAW_NPM_SPEC="openclaw@2026.3.11"
+
+stage_openclaw_package() {
+  local build_ctx="$1"
+  local local_openclaw_dir="${NEMOCLAW_OPENCLAW_DIR:-$REPO_DIR/../openclaw}"
+  local tarball_name=""
+
+  if [ -f "$local_openclaw_dir/package.json" ]; then
+    info "Using local OpenClaw source from $local_openclaw_dir"
+    tarball_name="$(cd "$build_ctx" && npm_config_loglevel=silent npm pack "$local_openclaw_dir" | tail -n 1)"
+  else
+    warn "Local OpenClaw source not found at $local_openclaw_dir"
+    info "Falling back to published $DEFAULT_OPENCLAW_NPM_SPEC"
+    tarball_name="$(cd "$build_ctx" && npm_config_loglevel=silent npm pack "$DEFAULT_OPENCLAW_NPM_SPEC" | tail -n 1)"
+  fi
+
+  [ -n "$tarball_name" ] || fail "Failed to stage OpenClaw package tarball"
+  mv "$build_ctx/$tarball_name" "$build_ctx/openclaw.tgz"
+}
+
 upsert_provider() {
   local name="$1"
   local type="$2"
@@ -182,6 +202,7 @@ info "Building and creating NemoClaw sandbox (this takes a few minutes on first 
 # Stage a clean build context (openshell doesn't honor .dockerignore)
 BUILD_CTX="$(mktemp -d)"
 cp "$REPO_DIR/Dockerfile" "$BUILD_CTX/"
+stage_openclaw_package "$BUILD_CTX"
 cp -r "$REPO_DIR/nemoclaw" "$BUILD_CTX/nemoclaw"
 cp -r "$REPO_DIR/nemoclaw-blueprint" "$BUILD_CTX/nemoclaw-blueprint"
 cp -r "$REPO_DIR/scripts" "$BUILD_CTX/scripts"

@@ -162,6 +162,23 @@ Local inference options such as Ollama, llama-server, and vLLM are still experim
 
 ---
 
+## Web Search
+
+`NemoClaw` now registers a `searxng` web-search provider through its OpenClaw plugin.
+
+- Default local endpoint: `http://host.openshell.internal:8081/search`
+- Intended to match the existing host-side SearXNG compose setup in this workspace
+- To enable it inside the sandbox:
+
+```bash
+openclaw config set tools.web.search.enabled true
+openclaw config set tools.web.search.provider searxng
+```
+
+More detail: [docs/tools/searxng-web-search.md](./docs/tools/searxng-web-search.md)
+
+---
+
 ## Protection Layers
 
 The sandbox starts with a strict baseline policy that controls network egress and filesystem access:

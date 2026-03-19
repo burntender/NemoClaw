@@ -3,6 +3,29 @@
   "name": "NemoClaw",
   "version": "0.1.0",
   "description": "Migrate and run OpenClaw inside OpenShell with optional NIM-backed inference",
+  "uiHints": {
+    "webSearch.baseUrl": {
+      "label": "SearXNG Base URL",
+      "help": "SearXNG search endpoint reachable from the sandbox, for example http://host.openshell.internal:8081/search.",
+      "placeholder": "http://host.openshell.internal:8081/search"
+    },
+    "webSearch.language": {
+      "label": "SearXNG Language",
+      "help": "Optional SearXNG language or locale hint such as ja-JP or en-US."
+    },
+    "webSearch.safeSearch": {
+      "label": "SearXNG SafeSearch",
+      "help": "SafeSearch level: 0 off, 1 moderate, 2 strict."
+    },
+    "webSearch.categories": {
+      "label": "SearXNG Categories",
+      "help": "Optional SearXNG category list, for example general or news."
+    },
+    "webSearch.engines": {
+      "label": "SearXNG Engines",
+      "help": "Optional engine allowlist forwarded to SearXNG."
+    }
+  },
   "configSchema": {
     "type": "object",
     "properties": {
@@ -25,6 +48,66 @@
         "type": "string",
         "description": "Default inference provider type (nvidia, vllm, openai-compatible)",
         "default": "nvidia"
+      },
+      "webSearch": {
+        "type": "object",
+        "description": "Optional SearXNG web-search configuration for the NemoClaw plugin.",
+        "additionalProperties": false,
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "description": "SearXNG endpoint reachable from the sandbox, for example http://host.openshell.internal:8081/search.",
+            "default": "http://host.openshell.internal:8081/search"
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional SearXNG language/locale hint such as ja-JP."
+          },
+          "safeSearch": {
+            "type": "integer",
+            "enum": [0, 1, 2],
+            "description": "SafeSearch level: 0 off, 1 moderate, 2 strict.",
+            "default": 0
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional SearXNG categories."
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional SearXNG engine allowlist."
+          },
+          "timeRange": {
+            "type": "string",
+            "enum": ["day", "month", "year"],
+            "description": "Optional default SearXNG time filter."
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Default maximum result count."
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Request timeout in seconds.",
+            "default": 12
+          },
+          "cacheTtlMinutes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Search result cache TTL in minutes.",
+            "default": 10
+          }
+        }
       }
     },
     "additionalProperties": false

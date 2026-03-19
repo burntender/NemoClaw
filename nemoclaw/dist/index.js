@@ -4,9 +4,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPluginConfig = getPluginConfig;
 exports.default = register;
+/**
+ * NemoClaw — OpenClaw Plugin for OpenShell
+ *
+ * Uses the real OpenClaw plugin API. Types defined locally are minimal stubs
+ * that match the OpenClaw SDK interfaces available at runtime via
+ * `openclaw/plugin-sdk`. We define them here because the SDK package is only
+ * available inside the OpenClaw host process and cannot be imported at build
+ * time.
+ */
 const cli_js_1 = require("./cli.js");
 const slash_js_1 = require("./commands/slash.js");
 const config_js_1 = require("./onboard/config.js");
+const searxng_js_1 = require("./web-search/searxng.js");
 function activeModelEntries(onboardCfg) {
     if (!onboardCfg?.model) {
         return [
@@ -100,6 +110,12 @@ function register(api) {
     const onboardCfg = (0, config_js_1.loadOnboardConfig)();
     const providerCredentialEnv = onboardCfg?.credentialEnv ?? "NVIDIA_API_KEY";
     api.registerProvider(registeredProviderForConfig(onboardCfg, providerCredentialEnv));
+    if (typeof api.registerWebSearchProvider === "function") {
+        api.registerWebSearchProvider((0, searxng_js_1.createSearxngWebSearchProvider)());
+    }
+    else {
+        api.logger.warn("registerWebSearchProvider is unavailable; skipping SearXNG registration.");
+    }
     const bannerEndpoint = onboardCfg ? (0, config_js_1.describeOnboardEndpoint)(onboardCfg) : "build.nvidia.com";
     const bannerProvider = onboardCfg ? (0, config_js_1.describeOnboardProvider)(onboardCfg) : "NVIDIA Cloud API";
     const bannerModel = onboardCfg?.model ?? "nvidia/nemotron-3-super-120b-a12b";

@@ -37,6 +37,10 @@ const policies = require("./policies");
 const { checkPortAvailable } = require("./preflight");
 const EXPERIMENTAL = process.env.NEMOCLAW_EXPERIMENTAL === "1";
 const DEFAULT_GATEWAY_PORT = 8080;
+const DEFAULT_OPENCLAW_NPM_SPEC = "openclaw@2026.3.11";
+const DEFAULT_SEARXNG_BASE_URL =
+  process.env.NEMOCLAW_SEARXNG_BASE_URL || process.env.SEARXNG_BASE_URL || "http://host.openshell.internal:8081/search";
+const DEFAULT_SEARXNG_LANGUAGE = process.env.NEMOCLAW_SEARXNG_LANGUAGE || "ja-JP";
 
 // Non-interactive mode: set by --non-interactive flag or env var.
 // When active, all prompts use env var overrides or sensible defaults.
@@ -86,6 +90,48 @@ function pythonLiteralJson(value) {
   return JSON.stringify(JSON.stringify(value));
 }
 
+function resolveLocalOpenClawDir() {
+  const explicit = (process.env.NEMOCLAW_OPENCLAW_DIR || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  return path.resolve(ROOT, "..", "openclaw");
+}
+
+function stageOpenClawPackage(buildCtx) {
+  const localOpenClawDir = resolveLocalOpenClawDir();
+  const localPackageJson = path.join(localOpenClawDir, "package.json");
+  const tarballDest = path.join(buildCtx, "openclaw.tgz");
+
+  let tarballName = "";
+  if (fs.existsSync(localPackageJson)) {
+    console.log(`  Using local OpenClaw source from '${localOpenClawDir}'`);
+    tarballName = runCapture(
+      `npm_config_loglevel=silent npm pack ${shellQuote(localOpenClawDir)}`,
+      { cwd: buildCtx },
+    );
+  } else {
+    console.log(`  Local OpenClaw source not found at '${localOpenClawDir}'`);
+    console.log(`  Falling back to published ${DEFAULT_OPENCLAW_NPM_SPEC}`);
+    tarballName = runCapture(`npm_config_loglevel=silent npm pack ${DEFAULT_OPENCLAW_NPM_SPEC}`, {
+      cwd: buildCtx,
+    });
+  }
+
+  tarballName = tarballName
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1);
+
+  if (!tarballName) {
+    throw new Error("Failed to stage OpenClaw package tarball");
+  }
+
+  const tarballSrc = path.join(buildCtx, tarballName);
+  fs.renameSync(tarballSrc, tarballDest);
+}
+
 function buildSandboxConfigSyncScript(selectionConfig) {
   const providerType =
     selectionConfig.provider ||
@@ -115,6 +161,10 @@ function buildSandboxConfigSyncScript(selectionConfig) {
       },
     ],
   };
+  const searxngConfig = {
+    baseUrl: DEFAULT_SEARXNG_BASE_URL,
+    language: DEFAULT_SEARXNG_LANGUAGE,
+  };
   return `
 set -euo pipefail
 mkdir -p ~/.nemoclaw ~/.openclaw
@@ -136,6 +186,15 @@ models_cfg = cfg.setdefault('models', {})
 models_cfg.setdefault('mode', 'merge')
 providers_cfg = models_cfg.setdefault('providers', {})
 providers_cfg[${JSON.stringify(providerKey)}] = json.loads(${pythonLiteralJson(providerConfig)})
+tools_cfg = cfg.setdefault('tools', {})
+web_cfg = tools_cfg.setdefault('web', {})
+search_cfg = web_cfg.setdefault('search', {})
+search_cfg['enabled'] = True
+search_cfg.setdefault('provider', 'searxng')
+searxng_cfg = search_cfg.setdefault('searxng', {})
+searxng_defaults = json.loads(${pythonLiteralJson(searxngConfig)})
+for key, value in searxng_defaults.items():
+    searxng_cfg.setdefault(key, value)
 
 with open(cfg_path, 'w') as f:
     json.dump(cfg, f, indent=2)
@@ -432,6 +491,7 @@ async function createSandbox(gpu) {
   const os = require("os");
   const buildCtx = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-build-"));
   fs.copyFileSync(path.join(ROOT, "Dockerfile"), path.join(buildCtx, "Dockerfile"));
+  stageOpenClawPackage(buildCtx);
   run(`cp -r "${path.join(ROOT, "nemoclaw")}" "${buildCtx}/nemoclaw"`);
   run(`cp -r "${path.join(ROOT, "nemoclaw-blueprint")}" "${buildCtx}/nemoclaw-blueprint"`);
   run(`cp -r "${path.join(ROOT, "scripts")}" "${buildCtx}/scripts"`);
