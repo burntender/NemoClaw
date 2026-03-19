@@ -7,6 +7,7 @@ const node_child_process_1 = require("node:child_process");
 const node_fs_1 = require("node:fs");
 const node_util_1 = require("node:util");
 const state_js_1 = require("../blueprint/state.js");
+const config_js_1 = require("../onboard/config.js");
 const execAsync = (0, node_util_1.promisify)(node_child_process_1.exec);
 /**
  * Detect whether the plugin is running inside an OpenShell sandbox.
@@ -80,7 +81,7 @@ async function cliStatus(opts) {
     logger.info("");
     logger.info("Inference:");
     if (inference.configured) {
-        logger.info(`  Provider:  ${inference.provider ?? "unknown"}`);
+        logger.info(`  Provider:  ${formatProviderDisplay(inference)}`);
         logger.info(`  Model:     ${inference.model ?? "unknown"}`);
         logger.info(`  Endpoint:  ${inference.endpoint ?? "unknown"}`);
     }
@@ -120,23 +121,67 @@ async function getSandboxStatus(sandboxName, insideSandbox) {
 }
 async function getInferenceStatus(insideSandbox) {
     if (insideSandbox) {
-        return { configured: false, provider: null, model: null, endpoint: null, insideSandbox: true };
+        return {
+            configured: false,
+            provider: null,
+            providerLabel: null,
+            model: null,
+            endpoint: null,
+            insideSandbox: true,
+        };
     }
     try {
         const { stdout } = await execAsync("openshell inference get --json", {
             timeout: 5000,
         });
         const parsed = JSON.parse(stdout);
+        const onboardConfig = (0, config_js_1.loadOnboardConfig)();
+        const providerLabel = onboardConfig && parsed.provider === onboardConfig.provider
+            ? (0, config_js_1.describeOnboardProvider)(onboardConfig)
+            : inferProviderLabel(parsed.provider);
         return {
             configured: true,
             provider: parsed.provider ?? null,
+            providerLabel,
             model: parsed.model ?? null,
             endpoint: parsed.endpoint ?? null,
             insideSandbox: false,
         };
     }
     catch {
-        return { configured: false, provider: null, model: null, endpoint: null, insideSandbox: false };
+        return {
+            configured: false,
+            provider: null,
+            providerLabel: null,
+            model: null,
+            endpoint: null,
+            insideSandbox: false,
+        };
     }
+}
+function inferProviderLabel(provider) {
+    switch (provider) {
+        case "nvidia":
+        case "nvidia-nim":
+            return "NVIDIA Cloud API";
+        case "ollama-local":
+            return "Local Ollama";
+        case "llama-server-local":
+            return "Local llama-server";
+        case "vllm-local":
+            return "Local vLLM";
+        case "nim-local":
+            return "Local NIM";
+        case "nvidia-ncp":
+            return "NVIDIA Cloud Partner";
+        default:
+            return null;
+    }
+}
+function formatProviderDisplay(inference) {
+    if (inference.providerLabel && inference.providerLabel !== inference.provider) {
+        return `${inference.providerLabel} (${inference.provider ?? "unknown"})`;
+    }
+    return inference.provider ?? inference.providerLabel ?? "unknown";
 }
 //# sourceMappingURL=status.js.map

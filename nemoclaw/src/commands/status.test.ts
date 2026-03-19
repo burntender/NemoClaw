@@ -24,10 +24,17 @@ vi.mock("../blueprint/state.js", () => ({
   loadState: vi.fn(),
 }));
 
+// Mock onboard config helpers — controls provider labeling
+vi.mock("../onboard/config.js", () => ({
+  loadOnboardConfig: vi.fn(() => null),
+  describeOnboardProvider: vi.fn((cfg: { providerLabel?: string }) => cfg.providerLabel ?? "Unknown"),
+}));
+
 // Import after mocks are set up
 const { existsSync } = await import("node:fs");
 const { exec } = await import("node:child_process");
 const { loadState } = await import("../blueprint/state.js");
+const { loadOnboardConfig } = await import("../onboard/config.js");
 const { cliStatus } = await import("./status.js");
 
 // ---------------------------------------------------------------------------
@@ -115,6 +122,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(existsSync).mockReturnValue(false);
   vi.mocked(loadState).mockReturnValue(blankState());
+  vi.mocked(loadOnboardConfig).mockReturnValue(null);
   mockExec({});
 });
 
@@ -190,9 +198,38 @@ describe("cliStatus", () => {
       await cliStatus({ json: false, logger, pluginConfig: defaultConfig });
 
       const output = lines.join("\n");
-      expect(output).toContain("Provider:  nvidia");
+      expect(output).toContain("Provider:  NVIDIA Cloud API (nvidia)");
       expect(output).toContain("Model:     nemotron-3-super-120b");
       expect(output).toContain("Endpoint:  https://integrate.api.nvidia.com");
+    });
+
+    it("shows a friendly provider label for local llama-server configs", async () => {
+      vi.mocked(loadOnboardConfig).mockReturnValue({
+        endpointType: "llama-server",
+        endpointUrl: "http://host.openshell.internal:8080/v1",
+        ncpPartner: null,
+        model: "Qwen3.5-122B-A10B-IQ4_KSS.gguf",
+        profile: "llama-server",
+        credentialEnv: "OPENAI_API_KEY",
+        provider: "llama-server-local",
+        providerLabel: "Local llama-server",
+        onboardedAt: "2026-03-19T12:00:00.000Z",
+      });
+      mockExec({
+        "sandbox status": JSON.stringify({ state: "running", uptime: "2h 14m" }),
+        "inference get": JSON.stringify({
+          provider: "llama-server-local",
+          model: "Qwen3.5-122B-A10B-IQ4_KSS.gguf",
+          endpoint: "http://host.openshell.internal:8080/v1",
+        }),
+      });
+
+      const { lines, logger } = captureLogger();
+      await cliStatus({ json: false, logger, pluginConfig: defaultConfig });
+
+      const output = lines.join("\n");
+      expect(output).toContain("Provider:  Local llama-server (llama-server-local)");
+      expect(output).toContain("Model:     Qwen3.5-122B-A10B-IQ4_KSS.gguf");
     });
 
     it("returns correct JSON structure", async () => {
@@ -207,6 +244,7 @@ describe("cliStatus", () => {
       expect(data.sandbox.insideSandbox).toBe(false);
       expect(data.inference.configured).toBe(true);
       expect(data.inference.provider).toBe("nvidia");
+      expect(data.inference.providerLabel).toBe("NVIDIA Cloud API");
       expect(data.inference.insideSandbox).toBe(false);
     });
   });

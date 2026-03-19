@@ -36,6 +36,7 @@ const nim = require("./nim");
 const policies = require("./policies");
 const { checkPortAvailable } = require("./preflight");
 const EXPERIMENTAL = process.env.NEMOCLAW_EXPERIMENTAL === "1";
+const DEFAULT_GATEWAY_PORT = 8080;
 
 // Non-interactive mode: set by --non-interactive flag or env var.
 // When active, all prompts use env var overrides or sensible defaults.
@@ -43,6 +44,18 @@ let NON_INTERACTIVE = false;
 
 function isNonInteractive() {
   return NON_INTERACTIVE;
+}
+
+function getGatewayPort() {
+  const raw = (process.env.NEMOCLAW_GATEWAY_PORT || process.env.OPENSHELL_GATEWAY_PORT || "").trim();
+  if (!raw) return DEFAULT_GATEWAY_PORT;
+  const port = Number.parseInt(raw, 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    console.error(`  Invalid NEMOCLAW_GATEWAY_PORT: ${raw}`);
+    console.error("  Expected an integer between 1 and 65535.");
+    process.exit(1);
+  }
+  return port;
 }
 
 // Prompt wrapper: returns env var value or default in non-interactive mode,
@@ -281,9 +294,10 @@ async function preflight() {
   }
   console.log(`  ✓ openshell CLI: ${runCapture("openshell --version 2>/dev/null || echo unknown", { ignoreError: true })}`);
 
-  // Required ports — gateway (8080) and dashboard (18789)
+  const gatewayPort = getGatewayPort();
+  // Required ports — gateway and dashboard (18789)
   const requiredPorts = [
-    { port: 8080, label: "OpenShell gateway" },
+    { port: gatewayPort, label: "OpenShell gateway" },
     { port: 18789, label: "NemoClaw dashboard" },
   ];
   for (const { port, label } of requiredPorts) {
@@ -338,7 +352,7 @@ async function startGateway(gpu) {
   // Destroy old gateway
   run("openshell gateway destroy -g nemoclaw 2>/dev/null || true", { ignoreError: true });
 
-  const gwArgs = ["--name", "nemoclaw"];
+  const gwArgs = ["--name", "nemoclaw", "--port", String(getGatewayPort())];
   // Do NOT pass --gpu here. On DGX Spark (and most GPU hosts), inference is
   // routed through a host-side provider (Ollama, vLLM, or cloud API) — the
   // sandbox itself does not need direct GPU access. Passing --gpu causes

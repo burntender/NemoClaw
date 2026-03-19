@@ -39,6 +39,14 @@ $ openshell inference set --provider nvidia-nim --model nvidia/nemotron-3-super-
 This requires the `NVIDIA_API_KEY` environment variable.
 The `nemoclaw onboard` command stores this key in `~/.nemoclaw/credentials.json` on first run.
 
+To switch to a local `llama-server` endpoint that was onboarded through `localhost:8080`, point OpenShell at the local provider and choose one of the model IDs exposed by `/v1/models`:
+
+```console
+$ openshell inference set --provider llama-server-local --model Qwen3.5-122B-A10B-IQ4_KSS.gguf
+```
+
+The local server should remain reachable from the sandbox through `http://host.openshell.internal:8080/v1`. In practice, that usually means starting `llama-server` on `0.0.0.0:8080` instead of binding it only to `127.0.0.1`.
+
 ## Verify the Active Model
 
 Run the status command to confirm the change:
@@ -66,6 +74,8 @@ You can switch to any of these models at runtime.
 | `nvidia/llama-3.1-nemotron-ultra-253b-v1` | Nemotron Ultra 253B | 131,072 | 4,096 |
 | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | Nemotron Super 49B v1.5 | 131,072 | 4,096 |
 | `nvidia/nemotron-3-nano-30b-a3b` | Nemotron 3 Nano 30B | 131,072 | 4,096 |
+
+For `ollama-local` and `llama-server-local`, the available model list comes from the local runtime itself. `nemoclaw onboard` queries the local endpoint and stores the selected model in `~/.nemoclaw/config.json`.
 
 ## Related Topics
 

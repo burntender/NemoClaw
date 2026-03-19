@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import type { PluginLogger, NemoClawConfig } from "../index.js";
 import { loadState } from "../blueprint/state.js";
+import { describeOnboardProvider, loadOnboardConfig } from "../onboard/config.js";
 
 const execAsync = promisify(exec);
 
@@ -93,7 +94,7 @@ export async function cliStatus(opts: StatusOptions): Promise<void> {
 
   logger.info("Inference:");
   if (inference.configured) {
-    logger.info(`  Provider:  ${inference.provider ?? "unknown"}`);
+    logger.info(`  Provider:  ${formatProviderDisplay(inference)}`);
     logger.info(`  Model:     ${inference.model ?? "unknown"}`);
     logger.info(`  Endpoint:  ${inference.endpoint ?? "unknown"}`);
   } else if (inference.insideSandbox) {
@@ -146,6 +147,7 @@ async function getSandboxStatus(sandboxName: string, insideSandbox: boolean): Pr
 interface InferenceStatus {
   configured: boolean;
   provider: string | null;
+  providerLabel: string | null;
   model: string | null;
   endpoint: string | null;
   insideSandbox: boolean;
@@ -159,21 +161,69 @@ interface InferenceStatusResponse {
 
 async function getInferenceStatus(insideSandbox: boolean): Promise<InferenceStatus> {
   if (insideSandbox) {
-    return { configured: false, provider: null, model: null, endpoint: null, insideSandbox: true };
+    return {
+      configured: false,
+      provider: null,
+      providerLabel: null,
+      model: null,
+      endpoint: null,
+      insideSandbox: true,
+    };
   }
   try {
     const { stdout } = await execAsync("openshell inference get --json", {
       timeout: 5000,
     });
     const parsed = JSON.parse(stdout) as InferenceStatusResponse;
+    const onboardConfig = loadOnboardConfig();
+    const providerLabel =
+      onboardConfig && parsed.provider === onboardConfig.provider
+        ? describeOnboardProvider(onboardConfig)
+        : inferProviderLabel(parsed.provider);
     return {
       configured: true,
       provider: parsed.provider ?? null,
+      providerLabel,
       model: parsed.model ?? null,
       endpoint: parsed.endpoint ?? null,
       insideSandbox: false,
     };
   } catch {
-    return { configured: false, provider: null, model: null, endpoint: null, insideSandbox: false };
+    return {
+      configured: false,
+      provider: null,
+      providerLabel: null,
+      model: null,
+      endpoint: null,
+      insideSandbox: false,
+    };
   }
+}
+
+function inferProviderLabel(provider: string | undefined): string | null {
+  switch (provider) {
+    case "nvidia":
+    case "nvidia-nim":
+      return "NVIDIA Cloud API";
+    case "ollama-local":
+      return "Local Ollama";
+    case "llama-server-local":
+      return "Local llama-server";
+    case "vllm-local":
+      return "Local vLLM";
+    case "nim-local":
+      return "Local NIM";
+    case "nvidia-ncp":
+      return "NVIDIA Cloud Partner";
+    default:
+      return null;
+  }
+}
+
+function formatProviderDisplay(inference: InferenceStatus): string {
+  if (inference.providerLabel && inference.providerLabel !== inference.provider) {
+    return `${inference.providerLabel} (${inference.provider ?? "unknown"})`;
+  }
+
+  return inference.provider ?? inference.providerLabel ?? "unknown";
 }

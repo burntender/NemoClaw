@@ -17,7 +17,7 @@
 #   1. Starts an OpenShell gateway (or reuses existing)
 #   2. Fixes CoreDNS for Colima environments
 #   3. Creates nvidia-nim provider (build.nvidia.com)
-#   4. Creates vllm-local provider (if vLLM is running)
+#   4. Creates local providers (vLLM, Ollama, llama-server) when available
 #   5. Sets inference route to nvidia-nim by default
 #   6. Builds and creates the NemoClaw sandbox
 #   7. Prints next steps
@@ -157,11 +157,23 @@ if [ "$(uname -s)" = "Darwin" ]; then
   fi
 fi
 
-# 4b. Inference route — default to nvidia-nim
+# 4b. llama-server (OpenAI-compatible local inference)
+if check_local_provider_health "llama-server-local"; then
+  LLAMA_SERVER_LOCAL_BASE_URL="$(get_local_provider_base_url "llama-server-local")"
+  upsert_provider \
+    "llama-server-local" \
+    "openai" \
+    "OPENAI_API_KEY=${OPENAI_API_KEY:-local-llama-server}" \
+    "OPENAI_BASE_URL=$LLAMA_SERVER_LOCAL_BASE_URL"
+  info "Detected local llama-server on localhost:8080"
+  warn "Keep llama-server listening on 0.0.0.0:8080 so the sandbox can reach it via host.openshell.internal."
+fi
+
+# 5. Inference route — default to nvidia-nim
 info "Setting inference route to nvidia-nim / Nemotron 3 Super..."
 openshell inference set --no-verify --provider nvidia-nim --model nvidia/nemotron-3-super-120b-a12b > /dev/null 2>&1
 
-# 5. Build and create sandbox
+# 6. Build and create sandbox
 info "Deleting old ${SANDBOX_NAME} sandbox (if any)..."
 openshell sandbox delete "$SANDBOX_NAME" > /dev/null 2>&1 || true
 
