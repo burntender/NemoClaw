@@ -25,6 +25,8 @@ function describeOnboardProvider(config) {
             return "NVIDIA Cloud API";
         case "ollama":
             return "Local Ollama";
+        case "llama-server":
+            return "Local llama-server";
         case "vllm":
             return "Local vLLM";
         case "nim-local":

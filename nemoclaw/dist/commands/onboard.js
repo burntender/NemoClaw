@@ -7,8 +7,16 @@ const node_child_process_1 = require("node:child_process");
 const config_js_1 = require("../onboard/config.js");
 const prompt_js_1 = require("../onboard/prompt.js");
 const validate_js_1 = require("../onboard/validate.js");
-const ENDPOINT_TYPES = ["build", "ncp", "nim-local", "vllm", "ollama", "custom"];
-const SUPPORTED_ENDPOINT_TYPES = ["build", "ncp", "ollama"];
+const ENDPOINT_TYPES = [
+    "build",
+    "ncp",
+    "nim-local",
+    "vllm",
+    "ollama",
+    "llama-server",
+    "custom",
+];
+const SUPPORTED_ENDPOINT_TYPES = ["build", "ncp", "ollama", "llama-server"];
 function isExperimentalEnabled() {
     return process.env.NEMOCLAW_EXPERIMENTAL === "1";
 }
@@ -36,6 +44,8 @@ function resolveProfile(endpointType) {
             return "vllm";
         case "ollama":
             return "ollama";
+        case "llama-server":
+            return "llama-server";
     }
 }
 function resolveProviderName(endpointType) {
@@ -51,6 +61,8 @@ function resolveProviderName(endpointType) {
             return "vllm-local";
         case "ollama":
             return "ollama-local";
+        case "llama-server":
+            return "llama-server-local";
     }
 }
 function resolveCredentialEnv(endpointType) {
@@ -63,6 +75,7 @@ function resolveCredentialEnv(endpointType) {
             return "NIM_API_KEY";
         case "vllm":
         case "ollama":
+        case "llama-server":
             return "OPENAI_API_KEY";
     }
 }
@@ -90,6 +103,8 @@ function defaultCredentialForEndpoint(endpointType) {
             return "dummy";
         case "ollama":
             return "ollama";
+        case "llama-server":
+            return "local-llama-server";
         default:
             return "";
     }
@@ -98,6 +113,10 @@ function detectOllama() {
     const installed = testCommand("command -v ollama >/dev/null 2>&1");
     const running = testCommand("curl -sf http://localhost:11434/api/tags >/dev/null 2>&1");
     return { installed, running };
+}
+function detectLlamaServer() {
+    const running = testCommand("curl -sf http://localhost:8080/v1/models >/dev/null 2>&1");
+    return { running };
 }
 function parseOllamaList(output) {
     return output
@@ -143,7 +162,7 @@ function showConfig(config, logger) {
     logger.info(`  Profile:     ${config.profile}`);
     logger.info(`  Onboarded:   ${config.onboardedAt}`);
 }
-async function promptEndpoint(ollama) {
+async function promptEndpoint(ollama, llamaServer) {
     const options = [
         {
             label: "NVIDIA Build (build.nvidia.com)",
@@ -164,6 +183,11 @@ async function promptEndpoint(ollama) {
             : ollama.installed
                 ? "installed locally"
                 : "localhost:11434",
+    });
+    options.push({
+        label: "Local llama-server",
+        value: "llama-server",
+        hint: llamaServer.running ? "detected on localhost:8080" : "localhost:8080/v1",
     });
     if (isExperimentalEnabled()) {
         options.push({
@@ -219,11 +243,16 @@ async function cliOnboard(opts) {
     }
     else {
         const ollama = detectOllama();
+        const llamaServer = detectLlamaServer();
         if (ollama.running) {
             logger.info("Detected local inference option: Ollama.");
             logger.info("Select it explicitly if you want to use it.");
         }
-        endpointType = await promptEndpoint(ollama);
+        if (llamaServer.running) {
+            logger.info("Detected local inference option: llama-server.");
+            logger.info("Select it explicitly if you want to use it.");
+        }
+        endpointType = await promptEndpoint(ollama, llamaServer);
     }
     // Step 2: Endpoint URL resolution
     let endpointUrl;
@@ -248,6 +277,9 @@ async function cliOnboard(opts) {
             break;
         case "ollama":
             endpointUrl = opts.endpointUrl ?? `${HOST_GATEWAY_URL}:11434/v1`;
+            break;
+        case "llama-server":
+            endpointUrl = opts.endpointUrl ?? `${HOST_GATEWAY_URL}:8080/v1`;
             break;
         case "custom":
             endpointUrl = opts.endpointUrl ?? (await (0, prompt_js_1.promptInput)("Custom endpoint URL"));
@@ -288,7 +320,10 @@ async function cliOnboard(opts) {
     // Step 4: Validate API Key
     // For local endpoints (vllm, ollama, nim-local), validation is best-effort since the
     // service may not be running yet during onboarding.
-    const isLocalEndpoint = endpointType === "vllm" || endpointType === "ollama" || endpointType === "nim-local";
+    const isLocalEndpoint = endpointType === "vllm" ||
+        endpointType === "ollama" ||
+        endpointType === "llama-server" ||
+        endpointType === "nim-local";
     logger.info("");
     logger.info(`Validating ${requiresApiKey ? "credential" : "endpoint"} against ${endpointUrl}...`);
     const validation = await (0, validate_js_1.validateApiKey)(apiKey, endpointUrl);

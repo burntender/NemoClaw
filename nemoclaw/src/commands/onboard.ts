@@ -24,8 +24,16 @@ export interface OnboardOptions {
   pluginConfig: NemoClawConfig;
 }
 
-const ENDPOINT_TYPES: EndpointType[] = ["build", "ncp", "nim-local", "vllm", "ollama", "custom"];
-const SUPPORTED_ENDPOINT_TYPES: EndpointType[] = ["build", "ncp", "ollama"];
+const ENDPOINT_TYPES: EndpointType[] = [
+  "build",
+  "ncp",
+  "nim-local",
+  "vllm",
+  "ollama",
+  "llama-server",
+  "custom",
+];
+const SUPPORTED_ENDPOINT_TYPES: EndpointType[] = ["build", "ncp", "ollama", "llama-server"];
 
 function isExperimentalEnabled(): boolean {
   return process.env.NEMOCLAW_EXPERIMENTAL === "1";
@@ -57,6 +65,8 @@ function resolveProfile(endpointType: EndpointType): string {
       return "vllm";
     case "ollama":
       return "ollama";
+    case "llama-server":
+      return "llama-server";
   }
 }
 
@@ -73,6 +83,8 @@ function resolveProviderName(endpointType: EndpointType): string {
       return "vllm-local";
     case "ollama":
       return "ollama-local";
+    case "llama-server":
+      return "llama-server-local";
   }
 }
 
@@ -86,6 +98,7 @@ function resolveCredentialEnv(endpointType: EndpointType): string {
       return "NIM_API_KEY";
     case "vllm":
     case "ollama":
+    case "llama-server":
       return "OPENAI_API_KEY";
   }
 }
@@ -114,6 +127,8 @@ function defaultCredentialForEndpoint(endpointType: EndpointType): string {
       return "dummy";
     case "ollama":
       return "ollama";
+    case "llama-server":
+      return "local-llama-server";
     default:
       return "";
   }
@@ -123,6 +138,11 @@ function detectOllama(): { installed: boolean; running: boolean } {
   const installed = testCommand("command -v ollama >/dev/null 2>&1");
   const running = testCommand("curl -sf http://localhost:11434/api/tags >/dev/null 2>&1");
   return { installed, running };
+}
+
+function detectLlamaServer(): { running: boolean } {
+  const running = testCommand("curl -sf http://localhost:8080/v1/models >/dev/null 2>&1");
+  return { running };
 }
 
 function parseOllamaList(output: string): string[] {
@@ -174,6 +194,7 @@ function showConfig(config: NemoClawOnboardConfig, logger: PluginLogger): void {
 
 async function promptEndpoint(
   ollama: { installed: boolean; running: boolean },
+  llamaServer: { running: boolean },
 ): Promise<EndpointType> {
   const options = [
     {
@@ -196,6 +217,12 @@ async function promptEndpoint(
       : ollama.installed
         ? "installed locally"
         : "localhost:11434",
+  });
+
+  options.push({
+    label: "Local llama-server",
+    value: "llama-server",
+    hint: llamaServer.running ? "detected on localhost:8080" : "localhost:8080/v1",
   });
 
   if (isExperimentalEnabled()) {
@@ -265,11 +292,16 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
     endpointType = ep;
   } else {
     const ollama = detectOllama();
+    const llamaServer = detectLlamaServer();
     if (ollama.running) {
       logger.info("Detected local inference option: Ollama.");
       logger.info("Select it explicitly if you want to use it.");
     }
-    endpointType = await promptEndpoint(ollama);
+    if (llamaServer.running) {
+      logger.info("Detected local inference option: llama-server.");
+      logger.info("Select it explicitly if you want to use it.");
+    }
+    endpointType = await promptEndpoint(ollama, llamaServer);
   }
 
   // Step 2: Endpoint URL resolution
@@ -296,6 +328,9 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
       break;
     case "ollama":
       endpointUrl = opts.endpointUrl ?? `${HOST_GATEWAY_URL}:11434/v1`;
+      break;
+    case "llama-server":
+      endpointUrl = opts.endpointUrl ?? `${HOST_GATEWAY_URL}:8080/v1`;
       break;
     case "custom":
       endpointUrl = opts.endpointUrl ?? (await promptInput("Custom endpoint URL"));
@@ -341,7 +376,10 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
   // For local endpoints (vllm, ollama, nim-local), validation is best-effort since the
   // service may not be running yet during onboarding.
   const isLocalEndpoint =
-    endpointType === "vllm" || endpointType === "ollama" || endpointType === "nim-local";
+    endpointType === "vllm" ||
+    endpointType === "ollama" ||
+    endpointType === "llama-server" ||
+    endpointType === "nim-local";
   logger.info("");
   logger.info(`Validating ${requiresApiKey ? "credential" : "endpoint"} against ${endpointUrl}...`);
   const validation = await validateApiKey(apiKey, endpointUrl);

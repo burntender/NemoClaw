@@ -9,7 +9,9 @@ const fs = require("fs");
 const path = require("path");
 const { ROOT, SCRIPTS, run, runCapture } = require("./runner");
 const {
+  DEFAULT_LLAMA_SERVER_MODEL,
   getDefaultOllamaModel,
+  getOpenAiCompatibleModelOptions,
   getLocalProviderBaseUrl,
   getOllamaModelOptions,
   getOllamaWarmupCommand,
@@ -73,15 +75,17 @@ function pythonLiteralJson(value) {
 
 function buildSandboxConfigSyncScript(selectionConfig) {
   const providerType =
-    selectionConfig.profile === "inference-local"
+    selectionConfig.provider ||
+    (selectionConfig.profile === "inference-local"
       ? selectionConfig.model === DEFAULT_OLLAMA_MODEL
         ? "ollama-local"
         : "nvidia-nim"
       : selectionConfig.endpointType === "vllm"
         ? "vllm-local"
-        : "nvidia-nim";
+        : "nvidia-nim");
   const primaryModel = getOpenClawPrimaryModel(providerType, selectionConfig.model);
   const providerKey = "inference";
+  const supportsVision = providerType === "llama-server-local";
   const providerConfig = {
     baseUrl: selectionConfig.endpointUrl,
     apiKey: "unused",
@@ -91,10 +95,10 @@ function buildSandboxConfigSyncScript(selectionConfig) {
         id: selectionConfig.model,
         name: selectionConfig.model,
         reasoning: false,
-        input: ["text"],
+        input: supportsVision ? ["text", "image"] : ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: 131072,
-        maxTokens: 4096,
+        maxTokens: supportsVision ? 8192 : 4096,
       },
     ],
   };
@@ -222,9 +226,10 @@ function getNonInteractiveProvider() {
   if (!providerKey) return null;
 
   const validProviders = new Set(["cloud", "ollama", "vllm", "nim"]);
+  validProviders.add("llama");
   if (!validProviders.has(providerKey)) {
     console.error(`  Unsupported NEMOCLAW_PROVIDER: ${providerKey}`);
-    console.error("  Valid values: cloud, ollama, vllm, nim");
+    console.error("  Valid values: cloud, ollama, llama, vllm, nim");
     process.exit(1);
   }
 
@@ -470,6 +475,7 @@ async function setupNim(sandboxName, gpu) {
   // Detect local inference options
   const hasOllama = !!runCapture("command -v ollama", { ignoreError: true });
   const ollamaRunning = !!runCapture("curl -sf http://localhost:11434/api/tags 2>/dev/null", { ignoreError: true });
+  const llamaServerRunning = !!runCapture("curl -sf http://localhost:8080/v1/models 2>/dev/null", { ignoreError: true });
   const vllmRunning = !!runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", { ignoreError: true });
   const requestedProvider = isNonInteractive() ? getNonInteractiveProvider() : null;
   const requestedModel = isNonInteractive() ? getNonInteractiveModel(requestedProvider || "cloud") : null;
@@ -490,6 +496,12 @@ async function setupNim(sandboxName, gpu) {
       label:
         `Local Ollama (localhost:11434)${ollamaRunning ? " — running" : ""}` +
         (ollamaRunning ? " (suggested)" : ""),
+    });
+  }
+  if (llamaServerRunning) {
+    options.push({
+      key: "llama",
+      label: "Local llama-server (localhost:8080) — running",
     });
   }
   if (EXPERIMENTAL && vllmRunning) {
@@ -519,6 +531,7 @@ async function setupNim(sandboxName, gpu) {
       const suggestions = [];
       if (vllmRunning) suggestions.push("vLLM");
       if (ollamaRunning) suggestions.push("Ollama");
+      if (llamaServerRunning) suggestions.push("llama-server");
       if (suggestions.length > 0) {
         console.log(`  Detected local inference option${suggestions.length > 1 ? "s" : ""}: ${suggestions.join(", ")}`);
         console.log("  Select one explicitly to use it. Press Enter to keep the cloud default.");
@@ -615,6 +628,26 @@ async function setupNim(sandboxName, gpu) {
       console.log("  ✓ Using existing vLLM on localhost:8000");
       provider = "vllm-local";
       model = "vllm-local";
+    } else if (selected.key === "llama") {
+      console.log("  ✓ Using existing llama-server on localhost:8080");
+      provider = "llama-server-local";
+      if (isNonInteractive()) {
+        model =
+          requestedModel ||
+          getOpenAiCompatibleModelOptions("llama-server-local", runCapture)[0] ||
+          DEFAULT_LLAMA_SERVER_MODEL;
+      } else {
+        const options = getOpenAiCompatibleModelOptions("llama-server-local", runCapture);
+        console.log("");
+        console.log("  llama-server models:");
+        options.forEach((option, index) => {
+          console.log(`    ${index + 1}) ${option}`);
+        });
+        console.log("");
+        const choice = await prompt("  Choose model [1]: ");
+        const index = parseInt(choice || "1", 10) - 1;
+        model = options[index] || options[0] || DEFAULT_LLAMA_SERVER_MODEL;
+      }
     }
     // else: cloud — fall through to default below
   }
@@ -703,6 +736,27 @@ async function setupInference(sandboxName, model, provider) {
       console.error(`  ${probe.message}`);
       process.exit(1);
     }
+  } else if (provider === "llama-server-local") {
+    const validation = validateLocalProvider(provider, runCapture);
+    if (!validation.ok) {
+      console.error(`  ${validation.message}`);
+      console.error("  Keep your local llama-server bound to 0.0.0.0:8080 so sandboxes can reach it.");
+      process.exit(1);
+    }
+    const baseUrl = getLocalProviderBaseUrl(provider);
+    const apiKey = process.env.OPENAI_API_KEY || "local-llama-server";
+    run(
+      `openshell provider create --name llama-server-local --type openai ` +
+      `--credential "OPENAI_API_KEY=${apiKey}" ` +
+      `--config "OPENAI_BASE_URL=${baseUrl}" 2>&1 || ` +
+      `openshell provider update llama-server-local --credential "OPENAI_API_KEY=${apiKey}" ` +
+      `--config "OPENAI_BASE_URL=${baseUrl}" 2>&1 || true`,
+      { ignoreError: true }
+    );
+    run(
+      `openshell inference set --no-verify --provider llama-server-local --model ${model} 2>/dev/null || true`,
+      { ignoreError: true }
+    );
   }
 
   registry.updateSandbox(sandboxName, { model, provider });
@@ -850,6 +904,7 @@ function printDashboard(sandboxName, model, provider) {
   if (provider === "nvidia-nim") providerLabel = "NVIDIA Cloud API";
   else if (provider === "vllm-local") providerLabel = "Local vLLM";
   else if (provider === "ollama-local") providerLabel = "Local Ollama";
+  else if (provider === "llama-server-local") providerLabel = "Local llama-server";
 
   console.log("");
   console.log(`  ${"─".repeat(50)}`);

@@ -28,4 +28,21 @@ describe("onboard helpers", () => {
     assert.match(script, /inference\/nemotron-3-nano:30b/);
     assert.match(script, /^exit$/m);
   });
+
+  it("marks local llama-server sandbox model config as vision-capable", () => {
+    const script = buildSandboxConfigSyncScript({
+      endpointType: "custom",
+      endpointUrl: "https://inference.local/v1",
+      ncpPartner: null,
+      model: "Qwen3.5-122B-A10B-IQ4_KSS.gguf",
+      profile: "inference-local",
+      credentialEnv: "OPENAI_API_KEY",
+      provider: "llama-server-local",
+      onboardedAt: "2026-03-19T10:00:00.000Z",
+    });
+
+    assert.match(script, /\\"input\\":\[\\"text\\",\\"image\\"\]/);
+    assert.match(script, /\\"maxTokens\\":8192/);
+    assert.match(script, /inference\/Qwen3\.5-122B-A10B-IQ4_KSS\.gguf/);
+  });
 });

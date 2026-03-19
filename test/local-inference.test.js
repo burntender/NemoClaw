@@ -6,8 +6,10 @@ const assert = require("node:assert/strict");
 
 const {
   CONTAINER_REACHABILITY_IMAGE,
+  DEFAULT_LLAMA_SERVER_MODEL,
   DEFAULT_OLLAMA_MODEL,
   getDefaultOllamaModel,
+  getOpenAiCompatibleModelOptions,
   getLocalProviderBaseUrl,
   getLocalProviderContainerReachabilityCheck,
   getLocalProviderHealthCheck,
@@ -34,6 +36,13 @@ describe("local inference helpers", () => {
     );
   });
 
+  it("returns the expected base URL for llama-server-local", () => {
+    assert.equal(
+      getLocalProviderBaseUrl("llama-server-local"),
+      "http://host.openshell.internal:8080/v1",
+    );
+  });
+
   it("returns the expected health check command for ollama-local", () => {
     assert.equal(
       getLocalProviderHealthCheck("ollama-local"),
@@ -41,10 +50,24 @@ describe("local inference helpers", () => {
     );
   });
 
+  it("returns the expected health check command for llama-server-local", () => {
+    assert.equal(
+      getLocalProviderHealthCheck("llama-server-local"),
+      "curl -sf http://localhost:8080/v1/models 2>/dev/null",
+    );
+  });
+
   it("returns the expected container reachability command for ollama-local", () => {
     assert.equal(
       getLocalProviderContainerReachabilityCheck("ollama-local"),
       `docker run --rm --add-host host.openshell.internal:host-gateway ${CONTAINER_REACHABILITY_IMAGE} -sf http://host.openshell.internal:11434/api/tags 2>/dev/null`,
+    );
+  });
+
+  it("returns the expected container reachability command for llama-server-local", () => {
+    assert.equal(
+      getLocalProviderContainerReachabilityCheck("llama-server-local"),
+      `docker run --rm --add-host host.openshell.internal:host-gateway ${CONTAINER_REACHABILITY_IMAGE} -sf http://host.openshell.internal:8080/v1/models 2>/dev/null`,
     );
   });
 
@@ -79,6 +102,30 @@ describe("local inference helpers", () => {
     const result = validateLocalProvider("vllm-local", () => "");
     assert.equal(result.ok, false);
     assert.match(result.message, /http:\/\/localhost:8000/);
+  });
+
+  it("returns a clear error when llama-server-local is unavailable", () => {
+    const result = validateLocalProvider("llama-server-local", () => "");
+    assert.equal(result.ok, false);
+    assert.match(result.message, /http:\/\/localhost:8080\/v1\/models/);
+  });
+
+  it("returns parsed model ids from a local OpenAI-compatible endpoint", () => {
+    assert.deepEqual(
+      getOpenAiCompatibleModelOptions("llama-server-local", () =>
+        JSON.stringify({
+          object: "list",
+          data: [{ id: "Qwen3.5-122B-A10B-IQ4_KSS.gguf" }, { id: "Qwen3.5-35B-A3B-MXFP4_MOE.gguf" }],
+        }),
+      ),
+      ["Qwen3.5-122B-A10B-IQ4_KSS.gguf", "Qwen3.5-35B-A3B-MXFP4_MOE.gguf"],
+    );
+  });
+
+  it("falls back to a generic local model id when the OpenAI-compatible model list is empty", () => {
+    assert.deepEqual(getOpenAiCompatibleModelOptions("llama-server-local", () => ""), [
+      DEFAULT_LLAMA_SERVER_MODEL,
+    ]);
   });
 
   it("parses model names from ollama list output", () => {

@@ -6,7 +6,14 @@ import { join } from "node:path";
 
 const CONFIG_DIR = join(process.env.HOME ?? "/tmp", ".nemoclaw");
 
-export type EndpointType = "build" | "ncp" | "nim-local" | "vllm" | "ollama" | "custom";
+export type EndpointType =
+  | "build"
+  | "ncp"
+  | "nim-local"
+  | "vllm"
+  | "ollama"
+  | "llama-server"
+  | "custom";
 
 export interface NemoClawOnboardConfig {
   endpointType: EndpointType;
@@ -38,6 +45,8 @@ export function describeOnboardProvider(config: NemoClawOnboardConfig): string {
       return "NVIDIA Cloud API";
     case "ollama":
       return "Local Ollama";
+    case "llama-server":
+      return "Local llama-server";
     case "vllm":
       return "Local vLLM";
     case "nim-local":

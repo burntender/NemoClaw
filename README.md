@@ -150,13 +150,15 @@ When something goes wrong, errors may originate from either NemoClaw or the Open
 
 Inference requests from the agent never leave the sandbox directly. OpenShell intercepts every call and routes it to the NVIDIA cloud provider.
 
-| Provider     | Model                               | Use Case                                       |
-|--------------|--------------------------------------|-------------------------------------------------|
-| NVIDIA cloud | `nvidia/nemotron-3-super-120b-a12b` | Production. Requires an NVIDIA API key.         |
+| Provider           | Model                               | Use Case                                                                 |
+|--------------------|--------------------------------------|--------------------------------------------------------------------------|
+| NVIDIA cloud       | `nvidia/nemotron-3-super-120b-a12b` | Production. Requires an NVIDIA API key.                                  |
+| Local Ollama       | autodetected                         | Experimental local inference through `http://localhost:11434`.           |
+| Local llama-server | autodetected via `/v1/models`        | Experimental OpenAI-compatible local inference through `http://localhost:8080/v1`. |
 
 Get an API key from [build.nvidia.com](https://build.nvidia.com). The `nemoclaw onboard` command prompts for this key during setup.
 
-Local inference options such as Ollama and vLLM are still experimental. On macOS, they also depend on OpenShell host-routing support in addition to the local service itself being reachable on the host.
+Local inference options such as Ollama, llama-server, and vLLM are still experimental. On macOS, they also depend on OpenShell host-routing support in addition to the local service itself being reachable on the host.
 
 ---
 

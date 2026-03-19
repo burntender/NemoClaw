@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 
 const {
   CLOUD_MODEL_OPTIONS,
+  DEFAULT_LLAMA_SERVER_MODEL,
   DEFAULT_OLLAMA_MODEL,
   DEFAULT_ROUTE_CREDENTIAL_ENV,
   DEFAULT_ROUTE_PROFILE,
@@ -43,6 +44,19 @@ describe("inference selection config", () => {
     });
   });
 
+  it("maps llama-server-local to the sandbox inference route and default model", () => {
+    assert.deepEqual(getProviderSelectionConfig("llama-server-local"), {
+      endpointType: "custom",
+      endpointUrl: INFERENCE_ROUTE_URL,
+      ncpPartner: null,
+      model: DEFAULT_LLAMA_SERVER_MODEL,
+      profile: DEFAULT_ROUTE_PROFILE,
+      credentialEnv: DEFAULT_ROUTE_CREDENTIAL_ENV,
+      provider: "llama-server-local",
+      providerLabel: "Local llama-server",
+    });
+  });
+
   it("maps nvidia-nim to the sandbox inference route", () => {
     assert.deepEqual(getProviderSelectionConfig("nvidia-nim", "nvidia/nemotron-3-super-120b-a12b"), {
       endpointType: "custom",
@@ -60,6 +74,13 @@ describe("inference selection config", () => {
     assert.equal(
       getOpenClawPrimaryModel("ollama-local", "nemotron-3-nano:30b"),
       `${MANAGED_PROVIDER_ID}/nemotron-3-nano:30b`,
+    );
+  });
+
+  it("builds a qualified OpenClaw primary model for llama-server-local", () => {
+    assert.equal(
+      getOpenClawPrimaryModel("llama-server-local", "Qwen3.5-122B-A10B-IQ4_KSS.gguf"),
+      `${MANAGED_PROVIDER_ID}/Qwen3.5-122B-A10B-IQ4_KSS.gguf`,
     );
   });
 });

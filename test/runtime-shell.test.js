@@ -128,6 +128,12 @@ describe("shell runtime helpers", () => {
     assert.equal(result.stdout.trim(), "http://host.openshell.internal:11434/v1");
   });
 
+  it("returns the llama-server-local base URL", () => {
+    const result = runShell(`source "${RUNTIME_SH}"; get_local_provider_base_url llama-server-local`);
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), "http://host.openshell.internal:8080/v1");
+  });
+
   it("rejects unknown local providers", () => {
     const result = runShell(`source "${RUNTIME_SH}"; get_local_provider_base_url bogus-provider`);
     assert.notEqual(result.status, 0);
